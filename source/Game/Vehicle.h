@@ -242,6 +242,85 @@ public:
     void        __thiscall CleanupPhysicsAndAudio();
     void        __thiscall SetHeading(void* a2, float angle, int32 a4);
 
+    static bool __cdecl    ArePedsAwareOrHostile(CPed* pPedA, CPed* pPedB);
+    void        __thiscall ResetDrawHandler();
+
+    bool        __thiscall SetDriver(CPed* pPed, uint32 arg4);
+    void        __thiscall UpdateUpsideDownAlarmOrFireFlag();
+    bool        __thiscall IsOnFireFlagActive();
+    static double __stdcall GetExcessSpeedOrInvalid(float speed, int32 unused);
+    CPed*       __thiscall GetRandomPassenger();
+    bool        __thiscall HasAnyActiveOccupant219();
+    bool        __thiscall HasAliveOccupants();
+    bool        __thiscall IsPedOccupant(const CPed* pPed);
+    bool        __thiscall IsInActiveRange(void* unused);
+    bool        __thiscall CanBeEnteredByPed();
+    void        __thiscall DecrementUnk133C();
+    bool        __thiscall ShouldSkipLodOrUpdate();
+
+    int32       __thiscall GetVehicleClassFromFlags();
+    void        __thiscall RemoveDriver(bool bSetFlag);
+    CPed*       __thiscall TryAddRandomDriver(int32 arg);
+    CPed*       __thiscall TryAddRandomPassenger(int32 seatIdx);
+    bool        __thiscall IsPedPassenger(const CPed* pPed);
+    bool        __thiscall IsPedDriver(const CPed* pPed);
+    bool        __thiscall IsDoorLockStateUnlocked();
+    void        __thiscall ProcessAlarm();
+    bool        __thiscall IsPointInBoundingBox(float x, float y, float z, float margin);
+    static int32 __cdecl   GetVehicleAnimGroupIndex(int32 animGroupId);
+    static bool __cdecl    IsSpecialVehicleModel(int32 modelIdx);
+    bool        __thiscall IsConvertibleRoofClosedOrValid();
+
+    void        __thiscall ResetBoneChild(int32 boneSlot);
+    void        __thiscall SetBoneHidden(int32 boneSlot, bool bHide);
+    bool        __thiscall IsBoneVisible(int32 boneSlot);
+    void        __thiscall SetCreatedBy(uint8 createdBy);
+    void        __thiscall ClearUnkFlagsF64_1344();
+    double      __thiscall GetBurnoutOrEngineHealthFactor();
+    bool        __thiscall HasAnyWheelUnk160Not1000();
+    bool        __thiscall HasAnyWheelUnk15CNot1000();
+    int32       __thiscall GetModelInfoEntryIndex(void* pEntry);
+    void        __thiscall ResolveContactPenetration(void* pContacts);
+    void        __thiscall ProcessFlyingPhysics(int32 nMode, float fTimeStep, float a4, float a5, float a6, float a7, float a8);
+
+    void*       __thiscall FindOrAllocateLink(int32 val, bool bCreate);
+    void        __thiscall ProcessLinks();
+    void*       __thiscall GetLinkForSeat(int32 seatSlot, int32 seatIdx);
+    void*       __thiscall GetLinkForSeatSlot(int32 seatSlot);
+    void        __thiscall GetUnkSeatOffset(float* pOutVec4, int32 doorOrSeat, int32 a4);
+    bool        __thiscall SaveStateSnapshot();
+    bool        __thiscall LoadStateSnapshot();
+    bool        __thiscall IsBoneNonZero(int32 boneSlot);
+    bool        __thiscall ResetBoneChildIfNonZero(int32 boneSlot);
+    static void* __cdecl   InitVehiclePool();
+    void        __thiscall ApplyHiddenBoneMask();
+    void        __thiscall UpdateSubObj80Position();
+
+    void        __thiscall ProcessDriverDropWeapon();
+    void        __thiscall ProcessCollisions(void** pContacts, void* pEntity, int32 startIdx, int32 count);
+    void        __thiscall InitBrokenBoneMask(int16 flags);
+    void        __thiscall UpdateDoorOpenRatio(void* pUnused, int32 doorId, uint8* pBone, bool bFlag);
+    void        __thiscall UpdateDoorCloseRatio(void* pUnused, int32 doorId, uint8* pBone, bool bFlag);
+    void        __thiscall UpdateUnk10D8_10C8_10CC(float* pVal1, int32 a3, float* pVal2, float* pVal3, bool bActive, bool bFlag);
+    void        __thiscall SetEngineOrBurnoutState(bool bEnable);
+    void        __thiscall ProcessEngineOrBurnout();
+    void        __thiscall ProcessInteriorLightOrUnk1114(float fTimeStep);
+    void        __thiscall UpdateDirtLevel();
+    void        __thiscall Dtor();
+    void        __thiscall SetModelIndex(int32 modelIndex);
+
+    void        __thiscall ProcessLightsAndEffects(float* pMat, uint32 flags);
+    void        __thiscall ApplyModelDoorRotation(int32 doorSlot, float* pMat3x4, uint8* pOutFlag);
+    bool        __thiscall IsClearAbove(const float* pPos);
+    void        __thiscall UpdateInteriorModelStream();
+    bool        __thiscall GetBoneEntryUnkC299A0(int32 boneSlot, float* pOutVec3);
+    bool        __thiscall GetBoneEntryUnk9C8900(int32 boneSlot, void* pOut);
+    void        __thiscall RegisterInUnk18A82AC(int32 unused);
+    double      __thiscall ComputeSeatEntryTransform(CMatrix* outMat, CEntity* pPed, int32 doorIdx, int32 bCheckBlocked, float fProgress, float fBlend, float fOffsetScale, const CVector* pLocalOff, float fExtraZ, bool bForceSide, bool bFlipSide, bool bDoProbe);
+    void        __thiscall DetachFragPart(int32 boneSlot, float fImpulse);
+    void        __thiscall UpdateNetworkOrPhysicsActive(bool bCheckSub);
+    void        __thiscall ProcessControl();
+
 private:
     void        ApplyPassengerImpulse(CPed* pPed);
 };
