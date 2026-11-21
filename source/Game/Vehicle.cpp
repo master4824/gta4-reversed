@@ -219,8 +219,7 @@ void CVehicle::InjectHooks()
     Core::Hook::Install(0x9D3E90, &CVehicle::UpdateDirtLevel);
     Core::Hook::Install(0x9D43E0, &CVehicle::Dtor);
     Core::Hook::Install(0x9D45E0, &CVehicle::SetModelIndex);
-    // Disabled pending full 0x9D0D60 headlight/shadow audit (169 active hooks work cleanly without it).
-    // Core::Hook::Install(0x9D0D60, &CVehicle::ProcessLightsAndEffects);
+    Core::Hook::Install(0x9D0D60, &CVehicle::ProcessLightsAndEffects);
     Core::Hook::Install(0x9D3F60, &CVehicle::ApplyModelDoorRotation);
     Core::Hook::Install(0x9D4120, &CVehicle::IsClearAbove);
     Core::Hook::Install(0x9D41F0, &CVehicle::UpdateInteriorModelStream);
@@ -232,7 +231,7 @@ void CVehicle::InjectHooks()
     Core::Hook::Install(0x9D6090, &CVehicle::UpdateNetworkOrPhysicsActive);
     Core::Hook::Install(0x9D62C0, &CVehicle::ProcessControl);
 
-    Core::Log::Info("CVehicle hooks installed (169 functions)");
+    Core::Log::Info("CVehicle hooks installed (170 functions)");
 }
 
 CVehicle* __thiscall CVehicle::Ctor(uint8 createdBy)
@@ -4701,8 +4700,9 @@ void __thiscall CVehicle::SetModelIndex(int32 modelIndex)
     Core::Hook::CallMethod<void>(0xCBB4C0, m_vehAudioEntity, this);
 }
 
-static void CallUsercall_9CCBE0(const float* pMat, float* pOutCenter, const float* pInVec,
-                                float halfX, float halfY, float halfZ, float intensity, int32 flag)
+__declspec(noinline) static void CallUsercall_9CCBE0(
+    const float* pNegAt, const float* pCenter, const float* pUpVec,
+    float halfX, float halfY, float halfZ, float intensity, int32 flag)
 {
     uintptr_t fn = Core::Rebase(0x9CCBE0);
     __asm
@@ -4712,9 +4712,9 @@ static void CallUsercall_9CCBE0(const float* pMat, float* pOutCenter, const floa
         push halfZ
         push halfY
         push halfX
-        push pInVec
-        push pOutCenter
-        mov eax, pMat
+        push pUpVec
+        push pCenter
+        mov eax, pNegAt
         call fn
         add esp, 1Ch
     }
@@ -4723,7 +4723,7 @@ static void CallUsercall_9CCBE0(const float* pMat, float* pOutCenter, const floa
 void __thiscall CVehicle::ProcessLightsAndEffects(float* pMat, uint32 flags)
 {
     uint8* self = reinterpret_cast<uint8*>(this);
-    if (Core::StaticRef<uint8>(0x161924A) != 0 || (m_nFlags & Core::StaticRef<uint32>(0x1135BA4)) == 0)
+    if (Core::StaticRef<uint8>(0x161924A) != 0 || (m_nUnk08 & Core::StaticRef<uint32>(0x1135BA4)) == 0)
         return;
 
     auto clampVal = [](float v, float lo, float hi) -> float
@@ -4794,90 +4794,107 @@ void __thiscall CVehicle::ProcessLightsAndEffects(float* pMat, uint32 flags)
         v161 > 0.01f &&
         (Core::StaticRef<uint8>(0x1619344) == 1 || (mi->m_nVehicleFlags & 0x800u) == 0))
     {
+        alignas(16) float negAt[4] = { -pMat[8], -pMat[9], -pMat[10], 0.0f };
+        alignas(16) float upVec[4] = { pMat[4], pMat[5], pMat[6], 0.0f };
+        uint8* pSkel = Core::Hook::CallMethod<uint8*>(0x447A20, this);
         if (GetVehicleType() == 1)
         {
             const int32* pCC = reinterpret_cast<const int32*>(mi->m_pVehicleStruct);
             int32 b1 = pCC[0x24 / 4];
             int32 b2 = pCC[0x34 / 4];
-            const float* pMatA = (b1 != -1) ? Core::Hook::CallMethod<const float*>(0x447A20, this, b1) : nullptr;
-            const float* pMatB = (b2 != -1) ? Core::Hook::CallMethod<const float*>(0x447A20, this, b2) : nullptr;
-            if (pMatA && pMatB)
+            if (b1 > -1 && b2 > -1 && pSkel)
             {
+                const uint8* localMats = *reinterpret_cast<const uint8* const*>(pSkel + 0x14);
+                const float* pMatA = reinterpret_cast<const float*>(localMats + (b1 << 6));
+                const float* pMatB = reinterpret_cast<const float*>(localMats + (b2 << 6));
                 float h = *reinterpret_cast<const float*>(reinterpret_cast<const uint8*>(mi) + 0x74) * Core::StaticRef<float>(0xF33ADC);
                 CVector wFront(pMatA[12], pMatA[13], pMatA[14]);
                 CVector wRear(pMatB[12], pMatB[13], pMatB[14]);
-                CVector mid = (wFront + wRear) * 0.5f;
+                float blend = Core::StaticRef<float>(0xF33AE0);
+                CVector mid = wFront * blend + wRear * (1.0f - blend);
+                if ((Core::StaticRef<uint32>(0x1619340) & 1u) == 0)
+                {
+                    Core::StaticRef<uint32>(0x1619340) |= 1u;
+                    Core::StaticRef<float>(0x1619330) = 0.0f;
+                    Core::StaticRef<float>(0x1619334) = 0.0f;
+                    Core::StaticRef<float>(0x1619338) = 0.0f;
+                }
+                alignas(16) float center[4] = {
+                    mid.x + Core::StaticRef<float>(0x1619330),
+                    mid.y + Core::StaticRef<float>(0x1619334),
+                    mid.z + Core::StaticRef<float>(0x1619338),
+                    0.0f
+                };
                 CVector diff = wFront - wRear;
                 float lenDiff = std::sqrtf(diff.MagnitudeSquared());
-
-                float matRot[16] = {};
-                matRot[0] = -m_pMatrix->up.x;    matRot[1] = -m_pMatrix->up.y;    matRot[2] = -m_pMatrix->up.z;
-                matRot[4] = m_pMatrix->right.x;  matRot[5] = m_pMatrix->right.y;  matRot[6] = m_pMatrix->right.z;
-                matRot[8] = m_pMatrix->at.x;     matRot[9] = m_pMatrix->at.y;     matRot[10] = m_pMatrix->at.z;
-
-                CVector worldMid(
-                    m_pMatrix->right.x * mid.x + m_pMatrix->up.x * mid.y + m_pMatrix->at.x * mid.z + m_pMatrix->pos.x,
-                    m_pMatrix->right.y * mid.x + m_pMatrix->up.y * mid.y + m_pMatrix->at.y * mid.z + m_pMatrix->pos.y,
-                    m_pMatrix->right.z * mid.x + m_pMatrix->up.z * mid.y + m_pMatrix->at.z * mid.z + m_pMatrix->pos.z);
-
-                float halfX = h * 0.5f;
-                float halfY = (lenDiff + h * 2.0f) * 0.5f * 0.5f;
-                float halfZ = h * 0.5f;
-                CallUsercall_9CCBE0(matRot, &mid.x, &worldMid.x,
+                float halfX = (h * Core::StaticRef<float>(0xF33AD0)) * 0.5f;
+                float halfY = ((lenDiff + h * 2.0f) * Core::StaticRef<float>(0xF33ACC)) * 0.5f;
+                float halfZ = (h * Core::StaticRef<float>(0xF33AD4)) * 0.5f;
+                CallUsercall_9CCBE0(negAt, center, upVec,
                                     halfX, halfY, halfZ,
                                     v161, Core::StaticRef<int32>(0xF33AD8));
             }
         }
-        else
+        else if (pSkel)
         {
             const int32 slots[4] = { 9, 10, 13, 14 };
-            CVector pts[4];
+            const uint8* localMats = *reinterpret_cast<const uint8* const*>(pSkel + 0x14);
+            const uint8* objMats = *reinterpret_cast<const uint8* const*>(pSkel + 0x0C);
+            CVector worldPts[4];
+            CVector objPts[4];
             int32 count = 0;
             for (int32 i = 0; i < 4; ++i)
             {
                 int32 boneId = static_cast<int32>(mi->m_pVehicleStruct->m_nBones[slots[i]]);
-                if (boneId != -1)
+                if (boneId > -1)
                 {
-                    const float* pm = Core::Hook::CallMethod<const float*>(0x447A20, this, boneId);
-                    if (pm)
-                        pts[count++] = { pm[12], pm[13], pm[14] };
+                    const float* pmWorld = reinterpret_cast<const float*>(localMats + (boneId << 6));
+                    const float* pmObj = reinterpret_cast<const float*>(objMats + boneId * 0x50);
+                    worldPts[count] = { pmWorld[12], pmWorld[13], pmWorld[14] };
+                    objPts[count] = { pmObj[12], pmObj[13], pmObj[14] };
+                    ++count;
                 }
             }
             float halfZ = *reinterpret_cast<const float*>(reinterpret_cast<const uint8*>(mi) + 0x74) * 2.0f * 0.5f;
             if (count == 4)
             {
-                CVector center = (pts[0] + pts[1] + pts[2] + pts[3]) * 0.25f;
-                float matLocal[16] = {};
-                std::memcpy(matLocal, m_pMatrix, sizeof(CMatrix));
-                float lenX = (std::sqrtf((pts[0] - pts[2]).MagnitudeSquared()) + std::sqrtf((pts[1] - pts[3]).MagnitudeSquared())) * 0.5f * 0.5f;
-                float lenY = (std::sqrtf((pts[0] - pts[1]).MagnitudeSquared()) + std::sqrtf((pts[2] - pts[3]).MagnitudeSquared())) * 0.5f * 0.5f;
-                CallUsercall_9CCBE0(&matLocal[8], &center.x, matLocal, lenX, lenY, halfZ, v161, 0);
+                CVector c = (worldPts[0] + worldPts[1] + worldPts[2] + worldPts[3]) * 0.25f;
+                alignas(16) float center[4] = { c.x, c.y, c.z, 0.0f };
+                float halfX = (std::sqrtf((worldPts[1] - worldPts[0]).MagnitudeSquared()) +
+                               std::sqrtf((worldPts[2] - worldPts[3]).MagnitudeSquared())) * 0.5f * 0.5f;
+                float halfY = (std::sqrtf((worldPts[0] - worldPts[2]).MagnitudeSquared()) +
+                               std::sqrtf((worldPts[1] - worldPts[3]).MagnitudeSquared())) * 0.5f * 0.5f;
+                CallUsercall_9CCBE0(negAt, center, upVec, halfX, halfY, halfZ, v161, 0);
             }
             else if (count == 3)
             {
-                CVector minP(Core::StaticRef<float>(0xD69830), Core::StaticRef<float>(0xD69830), Core::StaticRef<float>(0xD69830));
-                CVector maxP(Core::StaticRef<float>(0xD6982C), Core::StaticRef<float>(0xD6982C), Core::StaticRef<float>(0xD6982C));
-                CVector sum(0.0f, 0.0f, 0.0f);
+                float minX = Core::StaticRef<float>(0xD69830), maxX = Core::StaticRef<float>(0xD6982C);
+                float minY = minX, maxY = maxX;
+                float sumZ = 0.0f;
                 for (int32 i = 0; i < 3; ++i)
                 {
-                    if (pts[i].x < minP.x) minP.x = pts[i].x;
-                    if (pts[i].y < minP.y) minP.y = pts[i].y;
-                    if (pts[i].z < minP.z) minP.z = pts[i].z;
-                    if (pts[i].x > maxP.x) maxP.x = pts[i].x;
-                    if (pts[i].y > maxP.y) maxP.y = pts[i].y;
-                    if (pts[i].z > maxP.z) maxP.z = pts[i].z;
-                    sum = sum + pts[i];
+                    if (objPts[i].x < minX) minX = objPts[i].x;
+                    if (objPts[i].y < minY) minY = objPts[i].y;
+                    if (objPts[i].x > maxX) maxX = objPts[i].x;
+                    if (objPts[i].y > maxY) maxY = objPts[i].y;
+                    sumZ += objPts[i].z;
                 }
-                CVector center = sum * Core::StaticRef<float>(0xEBE2A0);
-                CVector half = (maxP - minP) * 0.5f;
-                float matLocal[16] = {};
-                std::memcpy(matLocal, m_pMatrix, sizeof(CMatrix));
-                CallUsercall_9CCBE0(&matLocal[8], &center.x, matLocal, half.x, half.y, halfZ, v161, 1);
+                CVector localC(
+                    (maxX - minX) * 0.5f + minX,
+                    (maxY - minY) * 0.5f + minY,
+                    sumZ * Core::StaticRef<float>(0xEBE2A0));
+                alignas(16) float center[4] = {
+                    pMat[0] * localC.x + pMat[4] * localC.y + pMat[8]  * localC.z + pMat[12],
+                    pMat[1] * localC.x + pMat[5] * localC.y + pMat[9]  * localC.z + pMat[13],
+                    pMat[2] * localC.x + pMat[6] * localC.y + pMat[10] * localC.z + pMat[14],
+                    0.0f
+                };
+                CallUsercall_9CCBE0(negAt, center, upVec, (maxX - minX) * 0.5f, (maxY - minY) * 0.5f, halfZ, v161, 0);
             }
         }
     }
 
-    uint8 blink = static_cast<uint8>(((static_cast<uint32>(static_cast<uint16>(m_nModelIndex)) + CTimer::ms_nTimeMs) >> 9) & 1u);
+    uint8 blink = static_cast<uint8>(((static_cast<uint32>(static_cast<uint16>(m_nRandomSeed)) + CTimer::ms_nTimeMs) >> 9) & 1u);
     uint16 f98 = static_cast<uint16>(m_nVehUnkF98);
     bool bHazardSiren = (f98 != 0 && f98 != 0xFFFFu && (m_nFlags2 & 0x7C00u) != 0xC00u);
     uint8 bEngineOn = (m_nVehFlagsF64 >> 3) & 1u;
@@ -4921,8 +4938,8 @@ void __thiscall CVehicle::ProcessLightsAndEffects(float* pMat, uint32 flags)
                 static_cast<uint8>(pCtrl[0x292E] ^ pCtrl[0x292C]) > 0x10u)
             {
                 bRevFlag = 1;
-                bHandbrakeOrParked = 0;
             }
+            bHandbrakeOrParked = 0;
         }
 
         bool bRev = ((m_fVehUnk10CC > 0.1f || bRevFlag == 1) && !bHandbrakeOrParked && pDriver && (m_nVehFlagsF6C & 8u) == 0);
@@ -4930,19 +4947,24 @@ void __thiscall CVehicle::ProcessLightsAndEffects(float* pMat, uint32 flags)
         if (typeEBE == 10 || typeEBE == 11 || typeEBE == 12 ||
             ((typeEBE == 4 || typeEBE == 14) && pDriver && pDriver->m_nDummyConvertState == 2))
         {
-            int8& fcc = *reinterpret_cast<int8*>(self + 0xFCC);
-            uint8 cnt = static_cast<uint8>(fcc & 0x1Fu);
-            if (cnt == 0)
+            uint8 oldState = (static_cast<uint8>(self[0xFCC]) >> 5) & 1u;
+            uint8 cnt = static_cast<uint8>(self[0xFCC]) & 0x1Fu;
+            uint8 curRev = bRev ? 1u : 0u;
+            if (oldState != curRev)
             {
-                fcc ^= 0x20;
-                cnt = 31;
+                if (cnt == 0)
+                {
+                    oldState = curRev;
+                    cnt = 16;
+                }
+                --cnt;
             }
-            else
+            else if (cnt != 0)
             {
                 --cnt;
             }
-            fcc = static_cast<int8>((fcc & ~0x1F) | cnt);
-            bRev = ((fcc & 0x20) != 0);
+            bRev = (oldState != 0);
+            self[0xFCC] = static_cast<uint8>(cnt | (oldState ? 0x20u : 0u));
         }
 
         bool bWantHead = ((m_nVehFlagsF65 & 1u) != 0 || bSirenBlink != 0);
@@ -4980,15 +5002,15 @@ void __thiscall CVehicle::ProcessLightsAndEffects(float* pMat, uint32 flags)
     {
         return en && (!bCheckDmg || m_nVehBoneResetMaskA[dmgIdx] == 0);
     };
-    bool indFL = indOk(bIndL && bFrontEn, 5);
     bool indFR = indOk(bIndR && bFrontEn, 4);
-    bool indRL = indOk(bIndL && bRearEn, 7);
+    bool indFL = indOk(bIndL && bFrontEn, 5);
     bool indRR = indOk(bIndR && bRearEn, 6);
+    bool indRL = indOk(bIndL && bRearEn, 7);
 
-    if (indFL) Core::Hook::CallMethod<void>(0x9CD0F0, this, 54, v150, mi, pMat);
-    if (indFR) Core::Hook::CallMethod<void>(0x9CD0F0, this, 55, v150, mi, pMat);
-    if (indRL) Core::Hook::CallMethod<void>(0x9CD0F0, this, 56, v150, mi, pMat);
-    if (indRR) Core::Hook::CallMethod<void>(0x9CD0F0, this, 57, v150, mi, pMat);
+    if (indFR) Core::Hook::CallMethod<void>(0x9CD0F0, this, 54, v150, mi, pMat);
+    if (indFL) Core::Hook::CallMethod<void>(0x9CD0F0, this, 55, v150, mi, pMat);
+    if (indRR) Core::Hook::CallMethod<void>(0x9CD0F0, this, 56, v150, mi, pMat);
+    if (indRL) Core::Hook::CallMethod<void>(0x9CD0F0, this, 57, v150, mi, pMat);
 
     Core::Hook::CallMethod<void>(0xAEAC00, m_vehSubObj260, (indFL || indFR || indRL || indRR) ? 1 : 0);
 
@@ -5011,7 +5033,7 @@ void __thiscall CVehicle::ProcessLightsAndEffects(float* pMat, uint32 flags)
         const uint8* e = reinterpret_cast<const uint8*>(m_nVehUnkFD8) + i * 0x34;
         int32 eType = *reinterpret_cast<const int32*>(e);
         if (eType != 0x27 && eType != 0x28 &&
-            (*reinterpret_cast<const float*>(e + 0x1C) >= 0.01f || Core::Hook::CallMethod<bool>(0xA5E400, e, 0)))
+            (*reinterpret_cast<const float*>(e + 0x1C) >= 0.01f || !Core::Hook::CallMethod<bool>(0xA5E400, e, 0)))
         {
             sirenFlag |= 1u;
             break;

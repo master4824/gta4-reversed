@@ -14,7 +14,7 @@ The long-term goal is to document every engine/game class and incrementally reim
 See [CLASS_MAP.md](CLASS_MAP.md) for the full IDA RTTI/vtable coverage map and per-module `Hook::Call` dependency status.
 
 - **Target Binary:** `GTAIV.exe` `1.0.7.0` (x86, `43,740` functions)
-- **Hooked Functions:** `1,331` implemented (`~3.04%`)
+- **Hooked Functions:** `1,332` implemented (`~3.05%`)
 - **Pure C++ Modules (`0` `Core::Hook::Call` fallbacks):**
   - `Core`: `Matrix.cpp`, `Pool.cpp`, `Vector.cpp`
   - `Game`: `General.cpp`, `IplStore.cpp`, `LoadingScreens.cpp`
@@ -59,7 +59,7 @@ See [CLASS_MAP.md](CLASS_MAP.md) for the full IDA RTTI/vtable coverage map and p
 | Game | `source/Game/Streaming.cpp` | 19 | 7 | |
 | Game | `source/Game/Timer.cpp` | 10 | 16 | |
 | Game | `source/Game/TxdStore.cpp` | 23 | 3 | |
-| Game | `source/Game/Vehicle.cpp` | 169 | 380 | `ProcessLightsAndEffects` (`0x9D0D60`) currently disabled |
+| Game | `source/Game/Vehicle.cpp` | 170 | 380 | |
 | Game | `source/Game/Wanted.cpp` | 10 | 8 | |
 | Game | `source/Game/WeaponInfo.cpp` | 70 | 139 | |
 | Game | `source/Game/Weather.cpp` | 5 | 9 | |
